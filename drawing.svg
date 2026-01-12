@@ -1,0 +1,12 @@
+<svg width="200" height="200" viewBox="0 0 200 200"
+     xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Circle 1: center (60,100), radius 40 -->
+  <circle cx="60" cy="100" r="40"
+          stroke="red" stroke-width="2" fill="none" />
+
+  <!-- Circle 2: center (140,100), radius 40 -->
+  <circle cx="160" cy="100" r="40"
+          stroke="red" stroke-width="2" fill="none" />
+
+</svg>

@@ -156,7 +156,7 @@ class SvgToGCode:
         self.add("G90             ;Absolute position coordinates")
         self.add("G1 X0 Y255 Z0 ")
         self.add("G1 X0.01 Y254.99 Z0 E0.00001 F1200")
-        self.add("G1 Z5 ; pen up")
+        self.add("G1 Z50 ; pen up")
         self.add("; ------------Initial Sequence------------")
 
     # ---------------------------------------------------------

@@ -22,7 +22,7 @@ class PdfToSvg:
         if not svg_string.strip():
             raise ValueError("Generated SVG is empty")
 
-        # NEW: remove white background rectangles
+        # remove white background rectangles
         svg_string = re.sub(r'<rect[^>]*fill="white"[^>]*/>', '', svg_string)
 
         temp_svg = pathlib.Path(self.svg_file)
@@ -54,35 +54,59 @@ class PdfToSvg:
             )
             scale = self._ask_for_scale(width, height)
 
-        # svgutils scaling removed — scaling now happens in SvgToGCode
         fig = sg.fromfile(str(temp_svg))
         fig.save(self.svg_file)
 
         return scale
 
     def _ask_for_scale(self, width, height):
-        print("\nCurrent dimensions:")
-        print(f"  Width:  {width}")
-        print(f"  Height: {height}")
+        MAX = self.max_size
 
-        dim_choice = input(
-            "\nWhich dimension do you want to change? (width/height): "
-        ).strip().lower()
+        while True:
+            print("\nCurrent dimensions:")
+            print(f"  Width:  {width}")
+            print(f"  Height: {height}")
 
-        if dim_choice == "width" or dim_choice == "w":
-            new_width = float(input("Enter new width: "))
-            print(new_width)
-            return new_width / width
+            dim_choice = input(
+                "\nWhich dimension do you want to change? (width/height): "
+            ).strip().lower()
 
-        elif dim_choice == "height" or dim_choice == "h":
-            new_height = float(input("Enter new height: "))
-            print(new_height)
-            return new_height / height
+            if dim_choice in ("width", "w"):
+                try:
+                    new_width = float(input("Enter new width: ").strip())
+                except ValueError:
+                    print("Invalid number, try again.")
+                    continue
 
-        else:
-            raise ValueError("Invalid dimension choice")
+                scale = new_width / width
+                new_height = height * scale
+
+            elif dim_choice in ("height", "h"):
+                try:
+                    new_height = float(input("Enter new height: ").strip())
+                except ValueError:
+                    print("Invalid number, try again.")
+                    continue
+
+                scale = new_height / height
+                new_width = width * scale
+
+            else:
+                print("Please enter 'width' or 'height'.")
+                continue
+
+            print("\nScaled dimensions:")
+            print(f"  Width:  {new_width}")
+            print(f"  Height: {new_height}")
+
+            if new_width > MAX or new_height > MAX:
+                print(f"\n❌ One or both dimensions exceed {MAX}. Try again.")
+                continue
+
+            print("\n✅ Dimensions accepted.")
+            return scale
 
     def run(self):
         width, height, temp_svg = self.convert()
         scale = self.scale(width, height, temp_svg)
-        self.scale_factor = scale  # NEW: store scale factor
+        self.scale_factor = scale

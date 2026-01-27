@@ -14,11 +14,14 @@ class SvgToGCode:
         # Remove Bounding Boxes
         self.paths = [p for p in self.paths if p.length() > 0.1]
 
-        # NEW: apply SVG <g transform="matrix(...)"> transforms
+        # Apply SVG transforms (your original version)
         self.apply_svg_transforms()
 
         # Split Compound Paths
         self.split_compound_paths()
+
+        # Remove duplicates
+        self.dedupe_paths()
 
         # Scale actual geometry
         self.scale_paths(scale_factor)
@@ -26,7 +29,7 @@ class SvgToGCode:
         # Normalize once before fitting
         self.normalize_paths()
 
-        # Fit to 255x255 bed
+        # Fit to 255x255 bed (disabled)
         # self.fit_to_bed(255)
 
         # Normalize again after fitting
@@ -34,6 +37,9 @@ class SvgToGCode:
 
         self.gcode = []
 
+    # ---------------------------------------------------------
+    # Apply SVG transform matrices
+    # ---------------------------------------------------------
     def apply_svg_transforms(self):
         with open(self.svg_file, "r") as f:
             svg = f.read()
@@ -42,7 +48,6 @@ class SvgToGCode:
         transforms = []
 
         for m in matrices:
-            # NEW: split on commas or spaces
             nums = re.split(r"[ ,]+", m.strip())
             a, b, c, d, e, f = map(float, nums)
             transforms.append((a, b, c, d, e, f))
@@ -72,7 +77,6 @@ class SvgToGCode:
                         a * seg.control2.real + c * seg.control2.imag + e,
                         b * seg.control2.real + d * seg.control2.imag + f
                     )
-
 
     # ---------------------------------------------------------
     # Scale actual path coordinates
@@ -140,7 +144,7 @@ class SvgToGCode:
                     seg.control2 *= scale
 
     # ---------------------------------------------------------
-    # Helper to add G-code lines
+    # Add G-code line
     # ---------------------------------------------------------
     def add(self, line):
         self.gcode.append(line)
@@ -166,18 +170,6 @@ class SvgToGCode:
         self.add("; ------------End Sequence------------")
         self.add("M84            ;Disable Motors")
         self.add("; ------------End Sequence------------")
-
-    # ---------------------------------------------------------
-    # Boundary square
-    # ---------------------------------------------------------
-    def draw_boundry(self):
-        self.add("G0 X0 Y0")
-        self.add("G1 Z0 ; pen down")
-        self.add("G0 X0 Y255 Z0")
-        self.add("G0 X255 Y255 Z0")
-        self.add("G0 X255 Y0 Z0")
-        self.add("G0 X0 Y0 Z0")
-        self.add("G1 Z50 ; pen up")
 
     # ---------------------------------------------------------
     # Convert paths to G-code
@@ -206,12 +198,28 @@ class SvgToGCode:
     def split_compound_paths(self):
         new_paths = []
         for path in self.paths:
-            # svgpathtools stores subpaths as separate segments
-            # but they share the same Path object
             subpaths = path.continuous_subpaths()
             for sp in subpaths:
                 new_paths.append(sp)
         self.paths = new_paths
+
+    # ---------------------------------------------------------
+    # Remove Duplicate Paths
+    # ---------------------------------------------------------
+    def dedupe_paths(self):
+        unique = []
+        seen = set()
+
+        for p in self.paths:
+            key = tuple(
+                (seg.start.real, seg.start.imag, seg.end.real, seg.end.imag)
+                for seg in p
+            )
+            if key not in seen:
+                seen.add(key)
+                unique.append(p)
+
+        self.paths = unique
 
     # ---------------------------------------------------------
     # Save G-code

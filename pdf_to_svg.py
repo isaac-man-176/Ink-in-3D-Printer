@@ -1,6 +1,8 @@
+# pdf_to_svg.py
 import pymupdf
 import pathlib
 import re
+import xml.etree.ElementTree as ET
 from svgutils import transform as sg
 
 class PdfToSvg:
@@ -28,8 +30,67 @@ class PdfToSvg:
         temp_svg = pathlib.Path(self.svg_file)
         temp_svg.write_text(svg_string, encoding="utf-8")
 
+        # ⭐ NEW: expand <use> into <path>
+        self.expand_svg_uses(temp_svg)
+
         return width, height, temp_svg
-    
+
+    def expand_svg_uses(self, svg_path):
+        ET.register_namespace("", "http://www.w3.org/2000/svg")
+        ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
+
+        tree = ET.parse(svg_path)
+        root = tree.getroot()
+
+        ns = {
+            "svg": "http://www.w3.org/2000/svg",
+            "xlink": "http://www.w3.org/1999/xlink"
+        }
+
+        # Collect glyph paths from <defs>
+        defs = root.find("svg:defs", ns)
+        glyphs = {}
+        if defs is not None:
+            for elem in defs:
+                if elem.tag.endswith("path") and "id" in elem.attrib:
+                    glyphs[elem.attrib["id"]] = elem.attrib.get("d", "")
+
+        # Expand <use> elements
+        for use in root.findall(".//svg:use", ns):
+            href = use.attrib.get("{http://www.w3.org/1999/xlink}href")
+            if not href:
+                continue
+
+            glyph_id = href.replace("#", "")
+            if glyph_id not in glyphs:
+                continue
+
+            d = glyphs[glyph_id]
+            transform = use.attrib.get("transform", "")
+
+            # Create new <path>
+            new_path = ET.Element("{http://www.w3.org/2000/svg}path")
+            new_path.set("d", d)
+            if transform:
+                new_path.set("transform", transform)
+
+            # Insert next to <use>
+            parent = use.getparent() if hasattr(use, "getparent") else None
+            if parent is not None:
+                parent.append(new_path)
+            else:
+                root.append(new_path)
+
+        # Remove <use> elements
+        for use in root.findall(".//svg:use", ns):
+            parent = use.getparent() if hasattr(use, "getparent") else None
+            if parent is not None:
+                parent.remove(use)
+
+        # Save updated SVG (namespace preserved)
+        tree.write(svg_path, encoding="utf-8", xml_declaration=True)
+
+
     def scale(self, width, height, temp_svg):
         print(f"\nOriginal SVG size:")
         print(f"  Width:  {width}")

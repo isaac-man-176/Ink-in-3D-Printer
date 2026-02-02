@@ -1,86 +1,93 @@
-from svgpathtools import svg2paths
+# svg_to_gcode.py
+from svgpathtools import svg2paths2
+import xml.etree.ElementTree as ET
 import numpy as np
 import re
 
 class SvgToGCode:
-    def __init__(self, svg_file, output_file, scale_factor=1.0):
+    def __init__(self, svg_file, output_file, scale_factor=1.0, line_segments=50, retraction_height=50, plot_height=0.2):
         self.svg_file = svg_file
         self.output_file = output_file
         self.scale_factor = scale_factor
+        self.line_segments = line_segments
+        self.retraction_height = retraction_height
+        self.plot_height = plot_height
 
         # Load paths
-        self.paths, _ = svg2paths(svg_file)
+        self.paths, self.attributes, self.svg_attributes = svg2paths2(self.svg_file)
+        print("Loaded paths:", len(self.paths))
 
-        # Remove Bounding Boxes
-        self.paths = [p for p in self.paths if p.length() > 0.1]
-
-        # Apply SVG transforms (your original version)
+        # Apply SVG transforms
         self.apply_svg_transforms()
 
         # Split Compound Paths
-        self.split_compound_paths()
+        # self.split_compound_paths()
 
         # Remove duplicates
         self.dedupe_paths()
 
+        # Sort paths to minimize printer head travel distance
+        self.sort_paths()
+
+        # Normalize first
+        self.normalize_paths()
+
         # Scale actual geometry
         self.scale_paths(scale_factor)
 
-        # Normalize once before fitting
-        self.normalize_paths()
-
-        # Fit to 255x255 bed (disabled)
-        # self.fit_to_bed(255)
-
-        # Normalize again after fitting
-        self.normalize_paths()
-
         self.gcode = []
 
-    # ---------------------------------------------------------
-    # Apply SVG transform matrices
-    # ---------------------------------------------------------
+    # Transform svg paths so they match svg
     def apply_svg_transforms(self):
-        with open(self.svg_file, "r") as f:
-            svg = f.read()
+        tree = ET.parse(self.svg_file)
+        root = tree.getroot()
 
-        matrices = re.findall(r'transform="matrix\(([^)]+)\)"', svg)
-        transforms = []
+        # Collect transforms in order of actual <path> elements
+        path_transforms = []
 
-        for m in matrices:
-            nums = re.split(r"[ ,]+", m.strip())
-            a, b, c, d, e, f = map(float, nums)
-            transforms.append((a, b, c, d, e, f))
+        def get_group_transform(elem):
+            t = ""
+            parent = elem
+            while parent is not None:
+                tr = parent.get("transform")
+                if tr:
+                    t = tr + " " + t
+                parent = parent.getparent() if hasattr(parent, "getparent") else None
+            return t.strip()
 
-        # If number of transforms doesn't match number of paths,
-        # apply identity transforms to missing ones
-        while len(transforms) < len(self.paths):
-            transforms.append((1, 0, 0, 1, 0, 0))
+        # Extract transforms in correct order
+        for elem in root.iter():
+            if elem.tag.endswith("path"):
+                combined = get_group_transform(elem)
+                path_transforms.append(combined)
 
-        for path, (a, b, c, d, e, f) in zip(self.paths, transforms):
-            for seg in path:
-                seg.start = complex(
-                    a * seg.start.real + c * seg.start.imag + e,
-                    b * seg.start.real + d * seg.start.imag + f
-                )
-                seg.end = complex(
-                    a * seg.end.real + c * seg.end.imag + e,
-                    b * seg.end.real + d * seg.end.imag + f
-                )
-                if hasattr(seg, "control1"):
-                    seg.control1 = complex(
-                        a * seg.control1.real + c * seg.control1.imag + e,
-                        b * seg.control1.real + d * seg.control1.imag + f
-                    )
-                if hasattr(seg, "control2"):
-                    seg.control2 = complex(
-                        a * seg.control2.real + c * seg.control2.imag + e,
-                        b * seg.control2.real + d * seg.control2.imag + f
-                    )
+        # Apply transforms
+        new_paths = []
+        for i, path in enumerate(self.paths):
+            transform_str = path_transforms[i] if i < len(path_transforms) else None
 
-    # ---------------------------------------------------------
-    # Scale actual path coordinates
-    # ---------------------------------------------------------
+            if transform_str and "matrix" in transform_str:
+                nums = re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", transform_str)
+                if len(nums) == 6:
+                    a, b, c, d, e, f = map(float, nums)
+                    for seg in path:
+                        seg.start = complex(a*seg.start.real + c*seg.start.imag + e,
+                                            b*seg.start.real + d*seg.start.imag + f)
+                        seg.end = complex(a*seg.end.real + c*seg.end.imag + e,
+                                        b*seg.end.real + d*seg.end.imag + f)
+                        if hasattr(seg, "control1"):
+                            seg.control1 = complex(a*seg.control1.real + c*seg.control1.imag + e,
+                                                b*seg.control1.real + d*seg.control1.imag + f)
+                        if hasattr(seg, "control2"):
+                            seg.control2 = complex(a*seg.control2.real + c*seg.control2.imag + e,
+                                                b*seg.control2.real + d*seg.control2.imag + f)
+
+            new_paths.append(path)
+
+        self.paths = new_paths
+
+
+    # scale paths
     def scale_paths(self, factor):
         for path in self.paths:
             for seg in path:
@@ -91,9 +98,7 @@ class SvgToGCode:
                 if hasattr(seg, "control2"):
                     seg.control2 *= factor
 
-    # ---------------------------------------------------------
-    # Normalize all paths together (preserve relative positions)
-    # ---------------------------------------------------------
+    # Normalize paths so it starts at 0,0
     def normalize_paths(self):
         xs = []
         ys = []
@@ -117,41 +122,11 @@ class SvgToGCode:
                 if hasattr(seg, "control2"):
                     seg.control2 += offset
 
-    # ---------------------------------------------------------
-    # Fit drawing inside 255x255 bed
-    # ---------------------------------------------------------
-    def fit_to_bed(self, bed_size=255):
-        xs = []
-        ys = []
-
-        for path in self.paths:
-            for seg in path:
-                xs.extend([seg.start.real, seg.end.real])
-                ys.extend([seg.start.imag, seg.end.imag])
-
-        width = max(xs)
-        height = max(ys)
-
-        scale = bed_size / max(width, height)
-
-        for path in self.paths:
-            for seg in path:
-                seg.start *= scale
-                seg.end *= scale
-                if hasattr(seg, "control1"):
-                    seg.control1 *= scale
-                if hasattr(seg, "control2"):
-                    seg.control2 *= scale
-
-    # ---------------------------------------------------------
-    # Add G-code line
-    # ---------------------------------------------------------
+    # Simple function to add 1 line of gcode
     def add(self, line):
         self.gcode.append(line)
 
-    # ---------------------------------------------------------
-    # Header
-    # ---------------------------------------------------------
+    # Header for all gcodes
     def add_header(self):
         self.add("; ------------Initial Sequence------------")
         self.add("G28             ;Home all axes")
@@ -160,41 +135,109 @@ class SvgToGCode:
         self.add("G90             ;Absolute position coordinates")
         self.add("G1 X0 Y255 Z0 ")
         self.add("G1 X0.01 Y254.99 Z0 E0.00001 F1200")
-        self.add("G1 Z50 ; pen up")
+        self.add(f"G1 Z{self.retraction_height} ; pen up")
         self.add("; ------------Initial Sequence------------")
 
-    # ---------------------------------------------------------
-    # Footer
-    # ---------------------------------------------------------
+    # Footer for all gcodes
     def add_footer(self):
         self.add("; ------------End Sequence------------")
         self.add("M84            ;Disable Motors")
         self.add("; ------------End Sequence------------")
 
-    # ---------------------------------------------------------
-    # Convert paths to G-code
-    # ---------------------------------------------------------
-    def convert_paths(self):
-        for path in self.paths:
-            first = True
+    # Get starting point of a path
+    def _get_path_start(self, path):
+        return path[0].start if len(path) > 0 else complex(0, 0)
 
+    # Convert paths to gcode with raster-scan ordering (top-to-bottom, left-right alternating)
+    def convert_paths(self):
+        # Create list of (index, start_point) for all paths
+        path_starts = [(i, self._get_centroid(path)) for i, path in enumerate(self.paths)]
+        
+        # Sort by Y (descending for top-to-bottom), then group by Y-coordinate
+        path_starts.sort(key=lambda x: -x[1].imag)  # Top to bottom
+        
+        # Group paths by Y coordinate with tolerance
+        y_threshold = 5  # Group paths within 5 units vertically
+        groups = []
+        current_group = []
+        last_y = None
+        
+        for idx, start in path_starts:
+            if last_y is None or abs(start.imag - last_y) <= y_threshold:
+                current_group.append((idx, start))
+                last_y = start.imag
+            else:
+                if current_group:
+                    groups.append(current_group)
+                current_group = [(idx, start)]
+                last_y = start.imag
+        
+        if current_group:
+            groups.append(current_group)
+        
+        # Process groups in raster pattern: left-right, right-left, repeat
+        all_indices = []
+        for group_idx, group in enumerate(groups):
+            if group_idx % 2 == 0:
+                # Left to right
+                group.sort(key=lambda x: x[1].real)
+            else:
+                # Right to left
+                group.sort(key=lambda x: -x[1].real)
+            
+            all_indices.extend([idx for idx, _ in group])
+        
+        # Draw paths in raster order
+        current_pos = complex(0, 0)
+        
+        for path_idx in all_indices:
+            path = self.paths[path_idx]
+            first = True
+            
             for segment in path:
-                for i, t in enumerate(np.linspace(0, 1, 50)):
+                for i, t in enumerate(np.linspace(0, 1, self.line_segments)):
                     point = segment.point(t)
                     x, y = point.real, point.imag
-
+                    
                     if first and i == 0:
+                        # Move to start of path and lower pen
                         self.add(f"G1 X{x:.3f} Y{y:.3f} F3000")
                         self.add("G1 Z0 ; pen down")
                         first = False
                     else:
                         self.add(f"G1 X{x:.3f} Y{y:.3f} F2000")
+            
+            # Update current position to end of path
+            last_segment = path[-1]
+            current_pos = last_segment.end
+            
+            # Retract pen
+            self.add(f"G1 Z{self.retraction_height} ; pen up")
 
-            self.add("G1 Z50 ; pen up")
+    # Sort paths
+    def sort_paths(self):
+        def centroid(path):
+            xs = []
+            ys = []
+            for seg in path:
+                xs.extend([seg.start.real, seg.end.real])
+                ys.extend([seg.start.imag, seg.end.imag])
+            cx = sum(xs) / len(xs)
+            cy = sum(ys) / len(ys)
+            return (cy, cx)  # sort top→bottom, then left→right
 
-    # ---------------------------------------------------------
-    # Split Compound Paths
-    # ---------------------------------------------------------
+        self.paths.sort(key=centroid)
+
+    # gets the middle of the path the aid with sorting
+    def _get_centroid(self, path):
+        xs = []
+        ys = []
+        for seg in path:
+            xs.extend([seg.start.real, seg.end.real])
+            ys.extend([seg.start.imag, seg.end.imag])
+        return complex(sum(xs)/len(xs), sum(ys)/len(ys))
+    
+    # Split compound paths into seperate paths
     def split_compound_paths(self):
         new_paths = []
         for path in self.paths:
@@ -203,16 +246,15 @@ class SvgToGCode:
                 new_paths.append(sp)
         self.paths = new_paths
 
-    # ---------------------------------------------------------
-    # Remove Duplicate Paths
-    # ---------------------------------------------------------
+    # Remove duplicate paths
     def dedupe_paths(self):
         unique = []
         seen = set()
 
         for p in self.paths:
             key = tuple(
-                (seg.start.real, seg.start.imag, seg.end.real, seg.end.imag)
+                (round(seg.start.real, 4), round(seg.start.imag, 4),
+                round(seg.end.real, 4), round(seg.end.imag, 4))
                 for seg in p
             )
             if key not in seen:
@@ -221,20 +263,14 @@ class SvgToGCode:
 
         self.paths = unique
 
-    # ---------------------------------------------------------
-    # Save G-code
-    # ---------------------------------------------------------
+    # Save gcode into file
     def save(self):
         with open(self.output_file, "w") as f:
             f.write("\n".join(self.gcode))
 
-    # ---------------------------------------------------------
-    # Run
-    # ---------------------------------------------------------
-    def run(self, drawBoundry=False):
+    # Convert svg to gcode
+    def run(self):
         self.add_header()
-        if drawBoundry:
-            self.draw_boundry()
         self.convert_paths()
         self.add_footer()
         self.save()

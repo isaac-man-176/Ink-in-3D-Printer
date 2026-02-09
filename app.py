@@ -48,13 +48,20 @@ while True:
         print("Invalid input. Please enter a valid number.")
 
 # More specific parameters (user does not change on use)
-retraction_height = 10  # Height to raise pen when moving (mm)
-plot_height = 0.2       # Initial layer height (mm)
+retraction_height = 20  # Height to raise pen when moving (mm)
+plot_height = 20       # Initial layer height (mm)
+pen_offset_forward = 35 # Forward offset of pen from nozzle (mm)
+
+# Calculate usable print area with pen offset
+max_x = printer_config['max_x']
+max_y = printer_config['max_y'] - pen_offset_forward
+
+print(f"  Usable print area with pen offset: {max_x}x{max_y}mm")
 
 # conversion pipeline
-pdf_to_svg = PdfToSvg("sample4.pdf", "drawing.svg", 255)
+pdf_to_svg = PdfToSvg("sample5.pdf", "drawing.svg", max_x, max_y)
 pdf_to_svg.run()
 
-# pass the scale factor into SvgToGCode
-svg_to_gcode = SvgToGCode("drawing.svg", "output.gcode", scale_factor=pdf_to_svg.scale_factor, line_segments=line_segments, retraction_height=retraction_height, plot_height=plot_height)
+# pass the scale factor and print boundaries into SvgToGCode
+svg_to_gcode = SvgToGCode("drawing.svg", "output.gcode", scale_factor=pdf_to_svg.scale_factor, line_segments=line_segments, retraction_height=retraction_height, plot_height=plot_height, max_x=max_x, max_y=max_y, pen_offset_y=pen_offset_forward)
 svg_to_gcode.run()

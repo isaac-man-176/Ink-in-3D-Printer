@@ -2,14 +2,16 @@
 import pymupdf
 import pathlib
 import re
+import os
 import xml.etree.ElementTree as ET
 from svgutils import transform as sg
 
 class PdfToSvg:
-    def __init__(self, pdf_file, svg_file, max_size):
+    def __init__(self, pdf_file, svg_file, max_x, max_y):
         self.pdf_file = pdf_file
         self.svg_file = svg_file
-        self.max_size = max_size
+        self.max_x = max_x
+        self.max_y = max_y
 
     def convert(self):
         doc = pymupdf.open(self.pdf_file)
@@ -30,10 +32,32 @@ class PdfToSvg:
         temp_svg = pathlib.Path(self.svg_file)
         temp_svg.write_text(svg_string, encoding="utf-8")
 
-        # ⭐ NEW: expand <use> into <path>
+        # expand <use> into <path>
         self.expand_svg_uses(temp_svg)
 
         return width, height, temp_svg
+
+    def rotate_pdf_page(self):
+        """Rotate the PDF page by 90 degrees clockwise"""
+        doc = pymupdf.open(self.pdf_file)
+        page = doc.load_page(0)
+        
+        # Set rotation: 90 degrees clockwise
+        page.set_rotation(90)
+        
+        # Save temporary rotated PDF
+        temp_pdf = self.pdf_file.replace('.pdf', '_rotated_temp.pdf')
+        doc.save(temp_pdf)
+        doc.close()
+        
+        return temp_pdf
+
+    def get_layout(self, width, height):
+        """Determine if layout is portrait or landscape"""
+        if height >= width:
+            return "portrait"
+        else:
+            return "landscape"
 
     def expand_svg_uses(self, svg_path):
         ET.register_namespace("", "http://www.w3.org/2000/svg")
@@ -96,11 +120,11 @@ class PdfToSvg:
         print(f"  Width:  {width}")
         print(f"  Height: {height}")
 
-        fits = max(width, height) <= self.max_size
+        fits = width <= self.max_x and height <= self.max_y
 
         if fits:
             choice = input(
-                f"\nSVG is within {self.max_size}x{self.max_size}. "
+                f"\nSVG is within {self.max_x}x{self.max_y}. "
                 "Do you want to change the scale? (y/n): "
             ).strip().lower()
 
@@ -110,7 +134,7 @@ class PdfToSvg:
                 scale = self._ask_for_scale(width, height)
         else:
             print(
-                f"\nSVG exceeds {self.max_size}x{self.max_size}."
+                f"\nSVG exceeds {self.max_x}x{self.max_y}."
                 "\nYou must scale it down."
             )
             scale = self._ask_for_scale(width, height)
@@ -121,8 +145,6 @@ class PdfToSvg:
         return scale
 
     def _ask_for_scale(self, width, height):
-        MAX = self.max_size
-
         while True:
             print("\nCurrent dimensions:")
             print(f"  Width:  {width}")
@@ -160,8 +182,8 @@ class PdfToSvg:
             print(f"  Width:  {new_width}")
             print(f"  Height: {new_height}")
 
-            if new_width > MAX or new_height > MAX:
-                print(f"\n❌ One or both dimensions exceed {MAX}. Try again.")
+            if new_width > self.max_x or new_height > self.max_y:
+                print(f"\n❌ Dimensions exceed {self.max_x}x{self.max_y}. Try again.")
                 continue
 
             print("\n✅ Dimensions accepted.")
@@ -169,5 +191,65 @@ class PdfToSvg:
 
     def run(self):
         width, height, temp_svg = self.convert()
+        layout = self.get_layout(width, height)
+        
+        print(f"\nCurrent layout: {layout}")
+        print(f"  Width:  {width}")
+        print(f"  Height: {height}")
+        
+        # Ask about rotation
+        if layout == "portrait":
+            ans = input("Do you want to rotate page into landscape? (y/n): ").strip().lower()
+            if ans == "y":
+                temp_pdf = self.rotate_pdf_page()
+                # Re-convert with rotated PDF
+                doc = pymupdf.open(temp_pdf)
+                page = doc.load_page(0)
+                width = page.rect.width
+                height = page.rect.height
+                svg_string = page.get_svg_image()
+                doc.close()
+                
+                if svg_string.strip():
+                    svg_string = re.sub(r'<rect[^>]*fill="white"[^>]*/>', '', svg_string)
+                    temp_svg.write_text(svg_string, encoding="utf-8")
+                    self.expand_svg_uses(temp_svg)
+                
+                # Clean up temp PDF
+                try:
+                    os.remove(temp_pdf)
+                except:
+                    pass
+                
+                print("✓ Rotated to landscape.")
+        else:
+            ans = input("Do you want to rotate page into portrait? (y/n): ").strip().lower()
+            if ans == "y":
+                temp_pdf = self.rotate_pdf_page()
+                # Re-convert with rotated PDF
+                doc = pymupdf.open(temp_pdf)
+                page = doc.load_page(0)
+                width = page.rect.width
+                height = page.rect.height
+                svg_string = page.get_svg_image()
+                doc.close()
+                
+                if svg_string.strip():
+                    svg_string = re.sub(r'<rect[^>]*fill="white"[^>]*/>', '', svg_string)
+                    temp_svg.write_text(svg_string, encoding="utf-8")
+                    self.expand_svg_uses(temp_svg)
+                
+                # Clean up temp PDF
+                try:
+                    os.remove(temp_pdf)
+                except:
+                    pass
+                
+                print("✓ Rotated to portrait.")
+        
+        print(f"\nLayout after rotation:")
+        print(f"  Width:  {width}")
+        print(f"  Height: {height}")
+        
         scale = self.scale(width, height, temp_svg)
         self.scale_factor = scale

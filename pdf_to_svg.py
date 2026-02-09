@@ -1,9 +1,9 @@
-# pdf_to_svg.py
 import pymupdf
 import pathlib
 import re
 import os
 import xml.etree.ElementTree as ET
+from lxml import etree as LET
 from svgutils import transform as sg
 
 class PdfToSvg:
@@ -26,38 +26,28 @@ class PdfToSvg:
         if not svg_string.strip():
             raise ValueError("Generated SVG is empty")
 
-        # remove white background rectangles
-        svg_string = re.sub(r'<rect[^>]*fill="white"[^>]*/>', '', svg_string)
-
         temp_svg = pathlib.Path(self.svg_file)
         temp_svg.write_text(svg_string, encoding="utf-8")
 
-        # expand <use> into <path>
+        # Expand <use> and remove white elements
         self.expand_svg_uses(temp_svg)
+        self.remove_white_elements(temp_svg)
 
         return width, height, temp_svg
 
     def rotate_pdf_page(self):
-        """Rotate the PDF page by 90 degrees clockwise"""
         doc = pymupdf.open(self.pdf_file)
         page = doc.load_page(0)
-        
-        # Set rotation: 90 degrees clockwise
         page.set_rotation(90)
-        
-        # Save temporary rotated PDF
+
         temp_pdf = self.pdf_file.replace('.pdf', '_rotated_temp.pdf')
         doc.save(temp_pdf)
         doc.close()
-        
+
         return temp_pdf
 
     def get_layout(self, width, height):
-        """Determine if layout is portrait or landscape"""
-        if height >= width:
-            return "portrait"
-        else:
-            return "landscape"
+        return "portrait" if height >= width else "landscape"
 
     def expand_svg_uses(self, svg_path):
         ET.register_namespace("", "http://www.w3.org/2000/svg")
@@ -71,7 +61,6 @@ class PdfToSvg:
             "xlink": "http://www.w3.org/1999/xlink"
         }
 
-        # Collect glyph paths from <defs>
         defs = root.find("svg:defs", ns)
         glyphs = {}
         if defs is not None:
@@ -79,7 +68,6 @@ class PdfToSvg:
                 if elem.tag.endswith("path") and "id" in elem.attrib:
                     glyphs[elem.attrib["id"]] = elem.attrib.get("d", "")
 
-        # Expand <use> elements
         for use in root.findall(".//svg:use", ns):
             href = use.attrib.get("{http://www.w3.org/1999/xlink}href")
             if not href:
@@ -92,27 +80,72 @@ class PdfToSvg:
             d = glyphs[glyph_id]
             transform = use.attrib.get("transform", "")
 
-            # Create new <path>
             new_path = ET.Element("{http://www.w3.org/2000/svg}path")
             new_path.set("d", d)
             if transform:
                 new_path.set("transform", transform)
 
-            # Insert next to <use>
             parent = use.getparent() if hasattr(use, "getparent") else None
             if parent is not None:
                 parent.append(new_path)
             else:
                 root.append(new_path)
 
-        # Remove <use> elements
         for use in root.findall(".//svg:use", ns):
             parent = use.getparent() if hasattr(use, "getparent") else None
             if parent is not None:
                 parent.remove(use)
 
-        # Save updated SVG (namespace preserved)
         tree.write(svg_path, encoding="utf-8", xml_declaration=True)
+
+
+    def remove_white_elements(self, svg_path):
+        """Remove ANY SVG element that draws a white background."""
+        parser = LET.XMLParser(remove_blank_text=True)
+        tree = LET.parse(str(svg_path), parser)
+        root = tree.getroot()
+
+        white_values = {"white", "#fff", "#ffffff"}
+
+        def is_white(elem):
+            # fill="white"
+            fill = elem.get("fill", "").lower().strip()
+            if fill in white_values:
+                return True
+
+            # style="fill:#ffffff"
+            style = elem.get("style", "").lower()
+            if "fill:" in style:
+                style_fill = style.split("fill:")[1].split(";")[0].strip()
+                if style_fill in white_values:
+                    return True
+
+            return False
+
+        # Remove elements with white fill
+        for elem in root.xpath(".//*[@fill]"):
+            if is_white(elem):
+                parent = elem.getparent()
+                if parent is not None:
+                    parent.remove(elem)
+
+        # Remove elements with white fill in style
+        for elem in root.xpath(".//*[@style]"):
+            if is_white(elem):
+                parent = elem.getparent()
+                if parent is not None:
+                    parent.remove(elem)
+
+        # Remove full-page background paths even without fill
+        for elem in root.xpath(".//path[@d]"):
+            d = elem.get("d", "").replace(",", " ").strip()
+            # Matches M0 0 H816 V1056 H0 Z (any numbers)
+            if d.startswith("M0 0") and "H" in d and "V" in d and d.endswith("Z"):
+                parent = elem.getparent()
+                if parent is not None:
+                    parent.remove(elem)
+
+        tree.write(str(svg_path), encoding="utf-8", xml_declaration=True, pretty_print=True)
 
 
     def scale(self, width, height, temp_svg):
@@ -192,64 +225,59 @@ class PdfToSvg:
     def run(self):
         width, height, temp_svg = self.convert()
         layout = self.get_layout(width, height)
-        
+
         print(f"\nCurrent layout: {layout}")
         print(f"  Width:  {width}")
         print(f"  Height: {height}")
-        
-        # Ask about rotation
+
         if layout == "portrait":
             ans = input("Do you want to rotate page into landscape? (y/n): ").strip().lower()
             if ans == "y":
                 temp_pdf = self.rotate_pdf_page()
-                # Re-convert with rotated PDF
                 doc = pymupdf.open(temp_pdf)
                 page = doc.load_page(0)
                 width = page.rect.width
                 height = page.rect.height
                 svg_string = page.get_svg_image()
                 doc.close()
-                
+
                 if svg_string.strip():
-                    svg_string = re.sub(r'<rect[^>]*fill="white"[^>]*/>', '', svg_string)
                     temp_svg.write_text(svg_string, encoding="utf-8")
                     self.expand_svg_uses(temp_svg)
-                
-                # Clean up temp PDF
+                    self.remove_white_elements(temp_svg)
+
                 try:
                     os.remove(temp_pdf)
                 except:
                     pass
-                
+
                 print("✓ Rotated to landscape.")
         else:
             ans = input("Do you want to rotate page into portrait? (y/n): ").strip().lower()
             if ans == "y":
                 temp_pdf = self.rotate_pdf_page()
-                # Re-convert with rotated PDF
                 doc = pymupdf.open(temp_pdf)
                 page = doc.load_page(0)
                 width = page.rect.width
                 height = page.rect.height
                 svg_string = page.get_svg_image()
                 doc.close()
-                
+
                 if svg_string.strip():
-                    svg_string = re.sub(r'<rect[^>]*fill="white"[^>]*/>', '', svg_string)
                     temp_svg.write_text(svg_string, encoding="utf-8")
                     self.expand_svg_uses(temp_svg)
-                
-                # Clean up temp PDF
+                    self.remove_white_elements(temp_svg)
+
                 try:
                     os.remove(temp_pdf)
                 except:
                     pass
-                
+
                 print("✓ Rotated to portrait.")
-        
+
         print(f"\nLayout after rotation:")
         print(f"  Width:  {width}")
         print(f"  Height: {height}")
-        
+
         scale = self.scale(width, height, temp_svg)
         self.scale_factor = scale

@@ -205,14 +205,12 @@ class SvgToGCode:
         self.add(f"G1 X0 Y{self.pen_offset_y} Z{self.plot_height} ")
         self.add(f"G1 X0.01 Y{self.pen_offset_y + 0.01} Z{self.plot_height} E0.001 F1200")
         self.add(f"G1 X0 Y{self.pen_offset_y} Z{self.plot_height} F3000")
-        self.add("M400 U1 ;Insert pen and press button to continue")
         self.add(f"G1 Z{self.plot_height + self.retraction_height} ; pen up")
         self.add("; ------------Initial Sequence------------")
 
     def add_footer(self):
         self.add("; ------------End Sequence------------")
         self.add("M84            ;Disable Motors")
-        self.add("M400 U1 ;Remove pen and press button to continue")
         self.add("; ------------End Sequence------------")
 
     def _get_path_start(self, path):

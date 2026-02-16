@@ -5,7 +5,7 @@ from pdf_to_svg import PdfToSvg
 # List of printers
 PRINTERS = {
     "A1 Mini": {"max_x": 180, "max_y": 180, "max_z": 180},
-    "P1S/P2S": {"max_x": 255, "max_y": 255, "max_z": 255},
+    "P1S/P2S": {"max_x": 240, "max_y": 255, "max_z": 255},
     "A1": {"max_x": 255, "max_y": 255, "max_z": 240},
     "H2D": {"max_x": 325, "max_y": 325, "max_z": 320},
 }
@@ -49,8 +49,8 @@ while True:
 
 # More specific parameters (user does not change on use)
 retraction_height = 20  # Height to raise pen when moving (mm)
-plot_height = 20       # Initial layer height (mm)
-pen_offset_forward = 35 # Forward offset of pen from nozzle (mm)
+plot_height = 63       # Initial layer height (mm)
+pen_offset_forward = 45 # Forward offset of pen from nozzle (mm)
 
 # Calculate usable print area with pen offset
 max_x = printer_config['max_x']

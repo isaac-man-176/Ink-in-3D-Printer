@@ -205,8 +205,8 @@ class SvgToGCode:
         self.add(f"G1 X0 Y{self.pen_offset_y} Z{self.plot_height} ")
         self.add(f"G1 X0.01 Y{self.pen_offset_y + 0.01} Z{self.plot_height} E0.001 F1200")
         self.add(f"G1 X0 Y{self.pen_offset_y} Z{self.plot_height} F3000")
-        self.add(f"G1 Z{self.plot_height + self.retraction_height} ; pen up")
         self.add("; ------------Initial Sequence------------")
+        self.add(f"G1 Z{self.plot_height + self.retraction_height} ; pen up")
 
     def add_footer(self):
         self.add("; ------------End Sequence------------")
@@ -312,18 +312,38 @@ class SvgToGCode:
         self.paths = unique
 
     def save(self):
-        # Remove consecutive duplicate movement lines before saving
-        cleaned = []
-        last = None
+        output = []
+        pen_up_count = 0
+        skipping = False
+
         for line in self.gcode:
-            # Only dedupe identical consecutive lines (keep comments and distinct moves)
-            if line == last:
+
+            # Count pen-ups
+            if "; pen up" in line:
+                pen_up_count += 1
+
+                # After header (2 pen-ups), start skipping until next pen-up
+                if pen_up_count == 2:
+                    skipping = True
+                    output.append(line)  # keep the header's second pen-up
+                    continue
+
+                # This is the first pen-up AFTER header → end skipping
+                if skipping and pen_up_count == 3:
+                    skipping = False
+                    # do NOT append this line (we delete rectangle including its pen-up)
+                    continue
+
+            # Skip rectangle block
+            if skipping:
                 continue
-            cleaned.append(line)
-            last = line
+
+            # Otherwise keep line
+            output.append(line)
 
         with open(self.output_file, "w") as f:
-            f.write("\n".join(cleaned))
+            f.write("\n".join(output))
+
 
     def run(self):
         self.add_header()

@@ -36,9 +36,6 @@ class SvgToGCode:
         # Drop any empty paths to avoid zero-length issues
         self.paths = [p for p in self.paths if len(p) > 0]
 
-        # Sort paths to minimize printer head travel distance
-        self.sort_paths()
-
         # Normalize first
         self.normalize_paths()
         
@@ -47,6 +44,12 @@ class SvgToGCode:
 
         # Scale actual geometry
         self.scale_paths(scale_factor)
+
+        # Remove rectangle bounding box after all transformations but before sorting
+        self.remove_bounding_box_path()
+
+        # Sort paths to minimize printer head travel distance
+        self.sort_paths()
 
         self.gcode = []
 
@@ -131,6 +134,7 @@ class SvgToGCode:
                     seg.control1 += offset
                 if hasattr(seg, "control2"):
                     seg.control2 += offset
+
     def filter_tiny_paths(self, min_size=1.0):
         """Remove paths smaller than min_size (in mm)"""
         filtered = []
@@ -191,7 +195,6 @@ class SvgToGCode:
         if split_total > 0:
             print(f"Split {split_total} compound paths into separate subpaths.")
             self.paths = new_paths
-
 
     def add(self, line):
         self.gcode.append(line)
@@ -335,8 +338,8 @@ class SvgToGCode:
                     continue
 
             # Skip rectangle block
-            if skipping:
-                continue
+            #if skipping:
+                #continue
 
             # Otherwise keep line
             output.append(line)
@@ -344,9 +347,65 @@ class SvgToGCode:
         with open(self.output_file, "w") as f:
             f.write("\n".join(output))
 
-
     def run(self):
         self.add_header()
         self.convert_paths()
         self.add_footer()
         self.save()
+
+    # -------------------------------------------------------------
+    # NEW: remove bounding-box rectangle after transforms, before sorting
+    # -------------------------------------------------------------
+    def remove_bounding_box_path(self):
+        if not self.paths:
+            return
+
+        # Compute global bounds
+        all_x = []
+        all_y = []
+        for path in self.paths:
+            for seg in path:
+                all_x.extend([seg.start.real, seg.end.real])
+                all_y.extend([seg.start.imag, seg.end.imag])
+
+        if not all_x or not all_y:
+            return
+
+        global_min_x = min(all_x)
+        global_min_y = min(all_y)
+        global_max_x = max(all_x)
+        global_max_y = max(all_y)
+
+        new_paths = []
+        removed = 0
+
+        for path in self.paths:
+            xs = []
+            ys = []
+            for seg in path:
+                xs.extend([seg.start.real, seg.end.real])
+                ys.extend([seg.start.imag, seg.end.imag])
+
+            if not xs or not ys:
+                new_paths.append(path)
+                continue
+
+            min_x = min(xs)
+            min_y = min(ys)
+            max_x = max(xs)
+            max_y = max(ys)
+
+            # Heuristic: rectangle bounding box covers full extents
+            if (abs(min_x - global_min_x) < 1e-3 and
+                abs(min_y - global_min_y) < 1e-3 and
+                abs(max_x - global_max_x) < 1e-3 and
+                abs(max_y - global_max_y) < 1e-3 and
+                len(path) == 4):
+                removed += 1
+                continue
+
+            new_paths.append(path)
+
+        if removed:
+            print(f"Removed {removed} bounding box path(s)")
+        self.paths = new_paths

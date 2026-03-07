@@ -5,6 +5,7 @@ import os
 import xml.etree.ElementTree as ET
 from lxml import etree as LET
 from svgutils import transform as sg
+import copy
 
 class PdfToSvg:
     def __init__(self, pdf_file, svg_file, max_x, max_y):
@@ -12,6 +13,8 @@ class PdfToSvg:
         self.svg_file = svg_file
         self.max_x = max_x
         self.max_y = max_y
+        self.scale_factor = 1.0
+        self.color_svgs = {}
 
     def convert(self):
         doc = pymupdf.open(self.pdf_file)
@@ -29,9 +32,17 @@ class PdfToSvg:
         temp_svg = pathlib.Path(self.svg_file)
         temp_svg.write_text(svg_string, encoding="utf-8")
 
-        # Expand <use> and remove white elements
+        # Expand <use> tags
         self.expand_svg_uses(temp_svg)
+
+        # Remove white shapes
         self.remove_white_elements(temp_svg)
+
+        # Remove duplicate paths
+        self.remove_overlapping_paths(temp_svg)
+
+        # Remove Google Docs page rectangles
+        self.remove_page_rectangles(temp_svg)
 
         return width, height, temp_svg
 
@@ -98,9 +109,7 @@ class PdfToSvg:
 
         tree.write(svg_path, encoding="utf-8", xml_declaration=True)
 
-
     def remove_white_elements(self, svg_path):
-        """Remove ANY SVG element that draws a white background."""
         parser = LET.XMLParser(remove_blank_text=True)
         tree = LET.parse(str(svg_path), parser)
         root = tree.getroot()
@@ -108,12 +117,10 @@ class PdfToSvg:
         white_values = {"white", "#fff", "#ffffff"}
 
         def is_white(elem):
-            # fill="white"
             fill = elem.get("fill", "").lower().strip()
             if fill in white_values:
                 return True
 
-            # style="fill:#ffffff"
             style = elem.get("style", "").lower()
             if "fill:" in style:
                 style_fill = style.split("fill:")[1].split(";")[0].strip()
@@ -122,30 +129,202 @@ class PdfToSvg:
 
             return False
 
-        # Remove elements with white fill
         for elem in root.xpath(".//*[@fill]"):
+            if elem.getparent().tag.endswith("defs"):
+                continue
             if is_white(elem):
                 parent = elem.getparent()
                 if parent is not None:
                     parent.remove(elem)
 
-        # Remove elements with white fill in style
         for elem in root.xpath(".//*[@style]"):
+            if elem.getparent().tag.endswith("defs"):
+                continue
             if is_white(elem):
                 parent = elem.getparent()
                 if parent is not None:
                     parent.remove(elem)
 
-        # Remove full-page background paths even without fill
+        # Remove GoodNotes/Docs white background rectangles
         for elem in root.xpath(".//path[@d]"):
+            if elem.getparent().tag.endswith("defs"):
+                continue
             d = elem.get("d", "").replace(",", " ").strip()
-            # Matches M0 0 H816 V1056 H0 Z (any numbers)
             if d.startswith("M0 0") and "H" in d and "V" in d and d.endswith("Z"):
                 parent = elem.getparent()
                 if parent is not None:
                     parent.remove(elem)
 
         tree.write(str(svg_path), encoding="utf-8", xml_declaration=True, pretty_print=True)
+
+    def remove_overlapping_paths(self, svg_path):
+        parser = LET.XMLParser(remove_blank_text=True)
+        tree = LET.parse(str(svg_path), parser)
+        root = tree.getroot()
+
+        seen = set()
+        remove_list = []
+
+        for elem in root.xpath(".//path[@d]"):
+            d = elem.get("d", "").strip()
+            key = d.replace(" ", "").replace(",", "")
+
+            if key in seen:
+                remove_list.append(elem)
+            else:
+                seen.add(key)
+
+        for elem in remove_list:
+            parent = elem.getparent()
+            if parent is not None:
+                parent.remove(elem)
+
+        if remove_list:
+            print(f"Removed {len(remove_list)} overlapping duplicate paths")
+
+        tree.write(str(svg_path), encoding="utf-8", xml_declaration=True, pretty_print=True)
+
+    # -------------------------------------------------------------
+    # Remove Google Docs page rectangles (the giant M0 0 Hxxx Vyyy H0 Z)
+    # -------------------------------------------------------------
+    def remove_page_rectangles(self, svg_path):
+        parser = LET.XMLParser(remove_blank_text=True)
+        tree = LET.parse(str(svg_path), parser)
+        root = tree.getroot()
+
+        def is_page_rect(d):
+            if not d:
+                return False
+            d_clean = d.replace(" ", "").replace(",", "").upper()
+            return d_clean.startswith("M00H") and "V" in d_clean and d_clean.endswith("Z")
+
+        remove_list = []
+
+        for elem in root.xpath(".//svg:path", namespaces={"svg": "http://www.w3.org/2000/svg"}):
+            d = elem.get("d", "")
+            if is_page_rect(d):
+                # Skip the one inside <defs> (clipPath)
+                parent = elem.getparent()
+                if parent is not None and parent.tag.endswith("defs"):
+                    continue
+                remove_list.append(elem)
+
+        for elem in remove_list:
+            parent = elem.getparent()
+            if parent is not None:
+                parent.remove(elem)
+
+        if remove_list:
+            print(f"Removed {len(remove_list)} Google Docs page rectangles")
+
+        tree.write(str(svg_path), encoding="utf-8", xml_declaration=True, pretty_print=True)
+
+    # -------------------------------------------------------------
+    # Split by colour, uncoloured → black
+    # -------------------------------------------------------------
+    def split_by_colour(self, svg_path):
+        parser = LET.XMLParser(remove_blank_text=True)
+        tree = LET.parse(str(svg_path), parser)
+        root = tree.getroot()
+
+        ns = {"svg": "http://www.w3.org/2000/svg"}
+
+        colour_groups = {}
+        uncoloured_key = "000000"
+
+        # Identify clipPath rectangle so we don't include it
+        clip_rect_d = None
+        defs = root.find("svg:defs", ns)
+        if defs is not None:
+            cp = defs.find("svg:clipPath", ns)
+            if cp is not None:
+                p = cp.find("svg:path", ns)
+                if p is not None:
+                    clip_rect_d = p.get("d", "").replace(" ", "").replace(",", "")
+
+        elements = root.xpath(".//svg:path | .//svg:use", namespaces=ns)
+
+        for elem in elements:
+            # Skip clipPath rectangle
+            d = elem.get("d", "")
+            if d:
+                d_key = d.replace(" ", "").replace(",", "")
+                if clip_rect_d and d_key == clip_rect_d:
+                    continue
+
+            fill = elem.get("fill")
+            stroke = elem.get("stroke")
+            style = elem.get("style", "")
+
+            colour = None
+
+            # 1. Prefer fill if present and not "none"
+            if fill and fill.lower() not in ("none", "transparent"):
+                colour = fill
+
+            # 2. Otherwise use stroke if present
+            elif stroke and stroke.lower() not in ("none", "transparent"):
+                colour = stroke
+
+            # 3. Otherwise check style="fill:..."
+            elif "fill:" in style:
+                c = style.split("fill:")[1].split(";")[0].strip()
+                if c.lower() not in ("none", "transparent"):
+                    colour = c
+
+            # 4. Otherwise check style="stroke:..."
+            elif "stroke:" in style:
+                c = style.split("stroke:")[1].split(";")[0].strip()
+                if c.lower() not in ("none", "transparent"):
+                    colour = c
+
+            # 5. Default to black
+            if not colour:
+                colour = uncoloured_key
+
+            # Normalize hex
+            colour = colour.lower().strip()
+            if colour.startswith("#"):
+                colour = colour[1:]
+            if len(colour) == 3:
+                colour = "".join([c * 2 for c in colour])
+            if not re.fullmatch(r"[0-9a-f]{6}", colour):
+                colour = uncoloured_key
+
+            if colour not in colour_groups:
+                colour_groups[colour] = []
+            colour_groups[colour].append(elem)
+
+        output = {}
+
+        for colour, elems in colour_groups.items():
+            new_svg = LET.Element(root.tag, nsmap=root.nsmap)
+
+            for attr in ["viewBox", "width", "height"]:
+                if attr in root.attrib:
+                    new_svg.set(attr, root.attrib[attr])
+
+            defs = root.find("svg:defs", ns)
+            if defs is not None:
+                new_svg.append(copy.deepcopy(defs))
+
+            for e in elems:
+                new_svg.append(copy.deepcopy(e))
+
+            out_path = svg_path.with_name(f"{svg_path.stem}_{colour}.svg")
+            LET.ElementTree(new_svg).write(
+                str(out_path),
+                encoding="utf-8",
+                pretty_print=True,
+                xml_declaration=True
+            )
+            output[colour] = str(out_path)
+
+        print("\nColour layers created:")
+        for c in output:
+            print(f"  #{c} -> {output[c]}")
+
+        return output
 
 
     def scale(self, width, height, temp_svg):
@@ -216,13 +395,13 @@ class PdfToSvg:
             print(f"  Height: {new_height}")
 
             if new_width > self.max_x or new_height > self.max_y:
-                print(f"\n❌ Dimensions exceed {self.max_x}x{self.max_y}. Try again.")
+                print(f"\nDimensions exceed {self.max_x}x{self.max_y}. Try again.")
                 continue
 
-            print("\n✅ Dimensions accepted.")
+            print("\nDimensions accepted.")
             return scale
 
-    def run(self):
+    def run(self, split_colors=True):
         width, height, temp_svg = self.convert()
         layout = self.get_layout(width, height)
 
@@ -231,7 +410,7 @@ class PdfToSvg:
         print(f"  Height: {height}")
 
         if layout == "portrait":
-            ans = input("Do you want to rotate page into landscape? (y/n): ").strip().lower()
+            ans = input("Rotate to landscape? (y/n): ").strip().lower()
             if ans == "y":
                 temp_pdf = self.rotate_pdf_page()
                 doc = pymupdf.open(temp_pdf)
@@ -245,35 +424,15 @@ class PdfToSvg:
                     temp_svg.write_text(svg_string, encoding="utf-8")
                     self.expand_svg_uses(temp_svg)
                     self.remove_white_elements(temp_svg)
+                    self.remove_overlapping_paths(temp_svg)
+                    self.remove_page_rectangles(temp_svg)
 
                 try:
                     os.remove(temp_pdf)
                 except:
                     pass
 
-                print("✓ Rotated to landscape.")
-        else:
-            ans = input("Do you want to rotate page into portrait? (y/n): ").strip().lower()
-            if ans == "y":
-                temp_pdf = self.rotate_pdf_page()
-                doc = pymupdf.open(temp_pdf)
-                page = doc.load_page(0)
-                width = page.rect.width
-                height = page.rect.height
-                svg_string = page.get_svg_image()
-                doc.close()
-
-                if svg_string.strip():
-                    temp_svg.write_text(svg_string, encoding="utf-8")
-                    self.expand_svg_uses(temp_svg)
-                    self.remove_white_elements(temp_svg)
-
-                try:
-                    os.remove(temp_pdf)
-                except:
-                    pass
-
-                print("✓ Rotated to portrait.")
+                print("Rotated to landscape.")
 
         print(f"\nLayout after rotation:")
         print(f"  Width:  {width}")
@@ -281,3 +440,10 @@ class PdfToSvg:
 
         scale = self.scale(width, height, temp_svg)
         self.scale_factor = scale
+
+        if split_colors:
+            self.color_svgs = self.split_by_colour(temp_svg)
+        else:
+            self.color_svgs = {}
+
+        return width, height, temp_svg, self.color_svgs

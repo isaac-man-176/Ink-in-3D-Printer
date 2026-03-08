@@ -1,14 +1,9 @@
-from pdf_to_svg import PdfToSvg
-from svg_to_gcode import SvgToGCode
-from multi_colour_manager import MultiColorManager
+# This file is for testing backend directly without frontend
 
-# List of printers
-PRINTERS = {
-    "A1 Mini": {"max_x": 180, "max_y": 180, "max_z": 180},
-    "P1S/P2S": {"max_x": 240, "max_y": 255, "max_z": 255},
-    "A1": {"max_x": 255, "max_y": 255, "max_z": 240},
-    "H2D": {"max_x": 325, "max_y": 325, "max_z": 320},
-}
+from app.pipeline.pdf_to_svg import PdfToSvg
+from app.pipeline.svg_to_gcode import SvgToGCode
+from app.pipeline.multi_colour_manager import MulticolourManager
+from app.config import PRINTERS, PEN_OFFSET_FWD, RETRACT_HEIGHT, PLOT_HEIGHT
 
 print("\nWelcome to Ink in 3D Printer")
 
@@ -63,31 +58,27 @@ while True:
     except ValueError:
         print("Invalid input. Please enter a valid number.")
 
-retraction_height = 20   # Height to raise pen when moving (mm)
-plot_height = 63         # Initial layer height (mm)
-pen_offset_forward = 45  # Forward offset of pen from nozzle (mm)
-
 max_x = printer_config['max_x']
-max_y = printer_config['max_y'] - pen_offset_forward
+max_y = printer_config['max_y'] - PEN_OFFSET_FWD
 
 print(f"Usable print area with pen offset: {max_x}x{max_y}mm")
 
-pdf_to_svg = PdfToSvg("sample4.pdf", "drawing.svg", max_x, max_y)
+pdf_to_svg = PdfToSvg("_samples/sample4.pdf", "drawing.svg", max_x, max_y)
 
 if mode_choice == 1:
     # Single Colour Mode
-    width, height, temp_svg, _ = pdf_to_svg.run(split_colors=False)
+    width, height, temp_svg, _ = pdf_to_svg.run(split_colours=False)
     
     svg_to_gcode = SvgToGCode(
         svg_file="drawing.svg",
         output_file="output.gcode",
         scale_factor=pdf_to_svg.scale_factor,
         line_segments=line_segments,
-        retraction_height=retraction_height,
-        plot_height=plot_height,
+        retraction_height=RETRACT_HEIGHT,
+        plot_height=PLOT_HEIGHT,
         max_x=max_x,
         max_y=max_y,
-        pen_offset_y=pen_offset_forward
+        pen_offset_y=PEN_OFFSET_FWD
     )
     
     svg_to_gcode.run()
@@ -95,18 +86,18 @@ if mode_choice == 1:
 
 else:
     # Multi Colour Mode
-    width, height, temp_svg, color_svgs = pdf_to_svg.run(split_colors=True)
+    width, height, temp_svg, colour_svgs = pdf_to_svg.run(split_colours=True)
     
-    manager = MultiColorManager(
-        color_svgs=color_svgs,
+    manager = MulticolourManager(
+        colour_svgs=colour_svgs,
         output_file="final_multicolour.gcode",
         scale_factor=pdf_to_svg.scale_factor,
         line_segments=line_segments,
-        retraction_height=retraction_height,
-        plot_height=plot_height,
+        retraction_height=RETRACT_HEIGHT,
+        plot_height=PLOT_HEIGHT,
         max_x=max_x,
         max_y=max_y,
-        pen_offset_y=pen_offset_forward
+        pen_offset_y=PEN_OFFSET_FWD
     )
     
     manager.assemble()

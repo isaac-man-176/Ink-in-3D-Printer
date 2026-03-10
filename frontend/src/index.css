@@ -1,17 +1,35 @@
 @import url('https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@500&display=swap');
-.body {
+
+:root {
+  /* Light theme (default) */
+  --bg-color: white;
+  --text-color: black;
+  --svg-color: black;
+}
+
+:root.dark {
+  /* Dark theme */
+  --bg-color: #111111;
+  --text-color: #eeeeee;
+  --svg-color: #eeeeee;
+}
+
+body {
   font-family: "Red Hat Display";
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: black;
-
+  
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  
+  transition: background-color 0.3s ease, color 1s ease;
 
-  margin:0;
+  margin: 0;
+  height: 100%;
+  width: 100%;
 }

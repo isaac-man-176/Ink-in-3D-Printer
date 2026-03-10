@@ -1,4 +1,12 @@
-.animation{
-    background: white;
+svg{
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 
+.animation{
+    width: auto;
+    height: 100%;
+    align-items: center;
+    display:flex;
+}

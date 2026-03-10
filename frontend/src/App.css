@@ -1,6 +1,21 @@
 #root {
-  max-width: 1280px;
   margin: 0;
   padding: 0rem;
   text-align: center;
+  width:100%;
+  height:100%;
+}
+
+.animationContainer{
+  height: 100%;
+  width: 100%;
+  display: flex;
+  justify-content:center;
+  align-items:center;
+  
+}
+
+html {
+  width:100%;
+  height:100%;
 }

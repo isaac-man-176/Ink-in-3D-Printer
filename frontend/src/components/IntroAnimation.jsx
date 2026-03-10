@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 
+import './introanimation.css'
+
 function calculatePathData() {
   const points = [
     // I
@@ -198,8 +200,8 @@ export function IntroAnimation(){
   const paperExiting = phase === 'paperOut';
 
   return (
-    <div className="w-full h-screen flex items-center justify-center bg-gray-50 overflow-hidden relative">
-      <svg width="800" height="600" viewBox="0 0 800 600" className="max-w-full">
+    <div className="animation" style={{ backgroundColor: "var(--bg-color)" }}>
+      <svg viewBox="-200 -162 1200 918" preserveAspectRatio="xMidYMid meet">
         <defs>
           {/* 
             The mask determines what parts of the text are visible. 
@@ -228,19 +230,19 @@ export function IntroAnimation(){
         </defs>
 
         {/*Printer Edges*/}
-        <AnimatedLine x1="200" y1="150" x2="600" y2="150" stroke="black" strokeWidth="4" dir="right" isVisible={isVisible} />
-        <AnimatedLine x1="600" y1="150" x2="600" y2="450" stroke="black" strokeWidth="4" dir="bottom" isVisible={isVisible} />
-        <AnimatedLine x1="600" y1="450" x2="200" y2="450" stroke="black" strokeWidth="4" dir="left" isVisible={isVisible} />
-        <AnimatedLine x1="200" y1="450" x2="200" y2="150" stroke="black" strokeWidth="4" dir="top" isVisible={isVisible} />
+        <AnimatedLine x1="200" y1="150" x2="600" y2="150" stroke="var(--svg-color)" strokeWidth="4" dir="right" isVisible={isVisible} />
+        <AnimatedLine x1="600" y1="150" x2="600" y2="450" stroke="var(--svg-color)" strokeWidth="4" dir="bottom" isVisible={isVisible} />
+        <AnimatedLine x1="600" y1="450" x2="200" y2="450" stroke="var(--svg-color)" strokeWidth="4" dir="left" isVisible={isVisible} />
+        <AnimatedLine x1="200" y1="450" x2="200" y2="150" stroke="var(--svg-color)" strokeWidth="4" dir="top" isVisible={isVisible} />
 
         <motion.rect
           x="230"
           y="170"
           width="340"
           height="260"
-          stroke="black"
+          stroke="var(--svg-color)"
           strokeWidth="2"
-          fill="white"
+          fill="var(--bg-color)"
           initial={{ y: 800, opacity: 0 }}
           animate={{
             y: paperExiting ? 800 : paperEntered ? 0 : 800,
@@ -265,7 +267,7 @@ export function IntroAnimation(){
           fontSize="80" 
           fontWeight="500" 
           textAnchor="middle" 
-          fill="black"
+          fill="var(--text-color)"
         >
           <text x="288" y="250">I</text>
           <text x="328" y="250">N</text>
@@ -295,13 +297,13 @@ export function IntroAnimation(){
           }}
         >
           {/* Toolhead Main Box */}
-          <AnimatedLine x1="-30" y1="-48" x2="30" y2="-48" stroke="black" strokeWidth="3" dir="left" isVisible={isVisible} />
-          <AnimatedLine x1="30" y1="-48" x2="30" y2="-8" stroke="black" strokeWidth="3" dir="top" isVisible={isVisible} />
-          <AnimatedLine x1="30" y1="-8" x2="-30" y2="-8" stroke="black" strokeWidth="3" dir="right" isVisible={isVisible} />
-          <AnimatedLine x1="-30" y1="-8" x2="-30" y2="-48" stroke="black" strokeWidth="3" dir="bottom" isVisible={isVisible} />
+          <AnimatedLine x1="-30" y1="-48" x2="30" y2="-48" stroke="var(--svg-color)" strokeWidth="3" dir="left" isVisible={isVisible} />
+          <AnimatedLine x1="30" y1="-48" x2="30" y2="-8" stroke="var(--svg-color)" strokeWidth="3" dir="top" isVisible={isVisible} />
+          <AnimatedLine x1="30" y1="-8" x2="-30" y2="-8" stroke="var(--svg-color)" strokeWidth="3" dir="right" isVisible={isVisible} />
+          <AnimatedLine x1="-30" y1="-8" x2="-30" y2="-48" stroke="var(--svg-color)" strokeWidth="3" dir="bottom" isVisible={isVisible} />
           
           {/* Marker Tip (Anchored directly at [0,0] so it aligns perfectly with the current X,Y keyframe coordinate) */}
-          <AnimatedCircle cx="0" cy="0" r="8" fill="white" stroke="black" strokeWidth="3" dir="top" isVisible={isVisible} />
+          <AnimatedCircle cx="0" cy="0" r="8" fill="var(--bg-color)" stroke="var(--svg-color)" strokeWidth="3" dir="top" isVisible={isVisible} />
         </motion.g>
       </svg>
     </div>

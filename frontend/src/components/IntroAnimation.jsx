@@ -168,7 +168,7 @@ export function IntroAnimation(){
     
     async function runLoop(){
       setPhase("assembling")
-      await delay(800)
+      await delay(600)
       setPhase("paperIn")
       await delay(500)
       setPhase("assembled")
@@ -176,7 +176,7 @@ export function IntroAnimation(){
       setPhase("writing")
       await delay(6500)
       setPhase("paperOut")
-      await delay(700)
+      await delay(800)
       setPhase("disassembling")
       await delay(1000)
       setPhase("hidden")

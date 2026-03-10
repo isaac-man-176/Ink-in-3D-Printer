@@ -42,20 +42,20 @@ function App() {
     return () => clearTimeout(timer)
   }, [])
 
-  if(showIntro){
-    return (
-      <div className = "animationContainer">
-        <IntroAnimation />
-      </div>
-  )}
-
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Home />} />
-      </Routes>
-    </BrowserRouter>
-  )
+    <>
+      {showIntro ? (
+        <div className="animationContainer">
+          <IntroAnimation />
+        </div>
+      ) : (
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Home />} />
+          </Routes>
+        </BrowserRouter>
+      )}
+    </>
+  );
 }
-
 export default App

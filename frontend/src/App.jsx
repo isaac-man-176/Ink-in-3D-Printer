@@ -7,18 +7,29 @@ import { IntroAnimation } from "./components/IntroAnimation"
 import Home from "./pages/Home"
 
 function App() {
-  const [showIntro, setShowIntro] = useState(true)
+  const [fadeOut, setFadeOut] = useState(false)
 
-  // Initialize theme from localStorage or prefers-color-scheme
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
     let theme;
-    if (savedTheme) {
+
+    // First: checks to see if programmer inputs theme in overrideTheme
+    let overrideTheme = ""
+    if (overrideTheme != ""){
+      theme = overrideTheme
+    }
+
+    // Second: checks if there is a locally saved theme (user ran program before)
+    else if (savedTheme) {
       theme = savedTheme;
     } 
+
+    // Third: checks system default
     else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
       theme = "dark"
     }
+
+    // Fallback: sets to light
     else {
       theme = "light";
     }
@@ -36,7 +47,7 @@ function App() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setShowIntro(false)
+      setFadeOut(true)
     }, 10000) // intro animation length
 
     return () => clearTimeout(timer)
@@ -44,17 +55,12 @@ function App() {
 
   return (
     <>
-      {showIntro ? (
-        <div className="animationContainer">
-          <IntroAnimation />
-        </div>
-      ) : (
         <BrowserRouter>
+          <IntroAnimation fadeOut={fadeOut} />
           <Routes>
             <Route path="/" element={<Home />} />
           </Routes>
         </BrowserRouter>
-      )}
     </>
   );
 }

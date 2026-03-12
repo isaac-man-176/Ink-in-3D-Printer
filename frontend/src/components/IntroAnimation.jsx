@@ -157,7 +157,7 @@ const AnimatedCircle = ({ cx, cy, r, fill, stroke, strokeWidth, dir, isVisible }
   );
 };
 
-export function IntroAnimation(){
+export function IntroAnimation({ fadeOut }){
   const [phase, setPhase] = useState("hidden")
 
   useEffect(()=> {
@@ -200,7 +200,7 @@ export function IntroAnimation(){
   const paperExiting = phase === 'paperOut';
 
   return (
-    <div className="animation" style={{ backgroundColor: "var(--bg-color)" }}>
+    <div className={`animation ${fadeOut ? 'fade-out' : ''}`}>
       <svg viewBox="-200 -162 1200 918" preserveAspectRatio="xMidYMid meet">
         <defs>
           {/* 
@@ -212,7 +212,7 @@ export function IntroAnimation(){
               d={pathD}
               fill="none"
               stroke="white"
-              strokeWidth="16" // Massive 32px stroke width ensures 100% font coverage without edge bleed
+              strokeWidth="16" // change this if mask is too large
               strokeLinecap="round"
               strokeLinejoin="round"
               initial={{ pathLength: 0, opacity: 0 }}

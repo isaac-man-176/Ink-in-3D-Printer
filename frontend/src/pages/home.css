@@ -1,0 +1,146 @@
+.home-container {
+  width: 100%;
+  min-height: 100vh;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.home-content {
+  max-width: 800px;
+  width: 100%;
+  text-align: center;
+}
+
+.home-title {
+  font-size: 3rem;
+  margin: 0 0 10px 0;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.home-subtitle {
+  font-size: 1.2rem;
+  margin: 0 0 60px 0;
+  opacity: 0.7;
+  font-weight: 400;
+}
+
+.mode-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  margin-bottom: 40px;
+}
+
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.mode-button {
+  padding: 20px 40px;
+  font-size: 1.3rem;
+  font-family: "Red Hat Display", sans-serif;
+  font-weight: 500;
+  border: 2px solid var(--svg-color);
+  background-color: transparent;
+  color: var(--svg-color);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.mode-button:hover {
+  background-color: var(--svg-color);
+  color: var(--bg-color);
+}
+
+.mode-button.selected {
+  background-color: var(--svg-color);
+  color: var(--bg-color);
+}
+
+.mode-description {
+  font-size: 1rem;
+  margin: 0;
+  opacity: 0.8;
+  line-height: 1.6;
+}
+
+.start-button {
+  padding: 15px 50px;
+  font-size: 1.1rem;
+  font-family: "Red Hat Display", sans-serif;
+  font-weight: 500;
+  border: 2px solid var(--svg-color);
+  background-color: var(--svg-color);
+  color: var(--bg-color);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.start-button:hover {
+  opacity: 0.9;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .home-title {
+    font-size: 2rem;
+  }
+
+  .home-subtitle {
+    font-size: 1rem;
+    margin-bottom: 40px;
+  }
+
+  .mode-button {
+    padding: 15px 30px;
+    font-size: 1.1rem;
+  }
+
+  .mode-description {
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .home-container {
+    padding: 15px;
+  }
+
+  .home-title {
+    font-size: 1.5rem;
+    margin-bottom: 8px;
+  }
+
+  .home-subtitle {
+    font-size: 0.9rem;
+    margin-bottom: 30px;
+  }
+
+  .mode-selector {
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+
+  .mode-button {
+    padding: 12px 24px;
+    font-size: 1rem;
+  }
+
+  .mode-description {
+    font-size: 0.9rem;
+  }
+
+  .start-button {
+    padding: 12px 40px;
+    font-size: 1rem;
+  }
+}

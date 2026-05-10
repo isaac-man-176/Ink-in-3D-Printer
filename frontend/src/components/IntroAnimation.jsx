@@ -222,7 +222,7 @@ export function IntroAnimation({ fadeOut }){
               }}
               transition={{ 
                 // Time matches the toolhead exactly, using the calculated custom `times` array for speed-ups
-                pathLength: { duration: phase === 'writing' ? 6 : 0, times: phase === 'writing' ? times : undefined, ease: "linear" },
+                pathLength: { duration: phase === 'writing' ? 4.5 : 0, times: phase === 'writing' ? times : undefined, ease: "linear" },
                 opacity: { duration: 0 }
               }}
             />
@@ -292,8 +292,8 @@ export function IntroAnimation({ fadeOut }){
             y: phase === 'writing' ? yKeyframes : phase === 'paperIn' || phase === 'assembled' || phase === 'assembling' ? yKeyframes[0] : yKeyframes[yKeyframes.length - 1],
           }}
           transition={{
-            x: phase === 'writing' ? { duration: 6, times, ease: "linear" } : { duration: 0 },
-            y: phase === 'writing' ? { duration: 6, times, ease: "linear" } : { duration: 0 },
+            x: phase === 'writing' ? { duration: 4.5, times, ease: "linear" } : { duration: 0 },
+            y: phase === 'writing' ? { duration: 4.5, times, ease: "linear" } : { duration: 0 },
           }}
         >
           {/* Toolhead Main Box */}

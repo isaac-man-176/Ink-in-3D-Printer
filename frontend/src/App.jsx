@@ -48,7 +48,7 @@ function App() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setFadeOut(true)
-    }, 10000) // intro animation length
+    }, 9100) // intro animation length
 
     return () => clearTimeout(timer)
   }, [])
